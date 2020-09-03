@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>news_reading_report.html</h1>
+    <p>Report generated on 18-Aug-2020 at 15:54:57 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "6.0.1"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-7-6.1.7601-SP1</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.10.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.4</td></tr></table>
+    <h2>Summary</h2>
+    <p>3 tests ran in 98.02 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">3 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_cases/test_news_page.py::TestNewsReading::test_read_and_print_all_news_in_current_page</td>
+          <td class="col-duration">1.79</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>Canon&#x27;s cloud platform has lost users&#x27; files – and it can&#x27;t restore them
+Gigapixel AI Accidentally Added Ryan Gosling’s Face to This Photo
+Graphical Linear Algebra
+Architecture of the Nintendo DS
+The life-changing love of one of the 20th century’s greatest physicists
+New language features and more in Kotlin 1.4
+Apple expands independent repair program to Mac after US antitrust investigation
+Mailto: ?attach=~/ parameter allows including arbitrary files on disk
+Let’s Learn x86-64 Assembly: Part 0 – Setup and First Steps
+A DOS JavaScript Canvas with Sound
+2.5M Medical Records Leaked by AI Company
+An Ecology of Mind
+Show HN: Dropbase 2.0 – Turn offline files into live databases
+The Computational Limits of Deep Learning
+Essential Coding Theory [pdf]
+The Last of the Hedgehogs: René Girard
+Create and view interactive cheatsheets on the command-line
+I fear App Review is getting too powerful (2015) [pdf]
+Slate, create beautiful, responsive API documentation
+Fossilised 429-million-year-old eye mirrors modern insect vision
+Using, Understanding, and Unraveling the OCaml Language
+Impossible Figures Library
+Launch HN: Batch (YC S20) – Replays for event-driven systems
+A circuit-like notation for lambda calculus (2015)
+A $10B Experimental City Nearly Got Built in Rural Minnesota (2018)
+Here’s an example of how brands build fake reviews on Amazon
+Stuck with Pound
+What’s Flying Above Us?
+Ultraviolet Hubble Movie
+Projected growth of Tiger Mosquito range in northeastern US (2013)
+Total news count in current page  30
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_cases/test_news_page.py::TestNewsReading::test_read_all_news_along_with_its_score_in_current_page</td>
+          <td class="col-duration">4.23</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>news : points
+Canon&#x27;s cloud platform has lost users&#x27; files – and it can&#x27;t restore them 135
+Gigapixel AI Accidentally Added Ryan Gosling’s Face to This Photo 40
+Graphical Linear Algebra 69
+Architecture of the Nintendo DS 113
+The life-changing love of one of the 20th century’s greatest physicists 29
+New language features and more in Kotlin 1.4 52
+Apple expands independent repair program to Mac after US antitrust investigation 387
+Mailto: ?attach=~/ parameter allows including arbitrary files on disk 51
+Let’s Learn x86-64 Assembly: Part 0 – Setup and First Steps 44
+A DOS JavaScript Canvas with Sound 15
+2.5M Medical Records Leaked by AI Company 214
+An Ecology of Mind 36
+Show HN: Dropbase 2.0 – Turn offline files into live databases 214
+The Computational Limits of Deep Learning 142
+Essential Coding Theory [pdf] 101
+The Last of the Hedgehogs: René Girard 14
+Create and view interactive cheatsheets on the command-line 48
+I fear App Review is getting too powerful (2015) [pdf] 901
+Slate, create beautiful, responsive API documentation 6
+Fossilised 429-million-year-old eye mirrors modern insect vision 4
+Using, Understanding, and Unraveling the OCaml Language 58
+Impossible Figures Library 43
+Launch HN: Batch (YC S20) – Replays for event-driven systems 134
+A circuit-like notation for lambda calculus (2015) 76
+A $10B Experimental City Nearly Got Built in Rural Minnesota (2018) 101
+Here’s an example of how brands build fake reviews on Amazon 33
+Stuck with Pound 16
+What’s Flying Above Us? 482
+Ultraviolet Hubble Movie 19
+Projected growth of Tiger Mosquito range in northeastern US (2013) 17
+Total entries of news  30
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_cases/test_news_page.py::TestNewsReading::test_read_news_up_to_required_page_count</td>
+          <td class="col-duration">25.42</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>news : points
+Ask HN: How do you overcome decision fatigue in software development? 136
+U.S. states seek $2.2T from OxyContin maker Purdue Pharma 108
+USPS patent for reliable blockchain voting system 14
+Amazon Liable for Defective Third-Party Products Rules CA Appellate Court 711
+An Introduction to OpenBSD [video] 196
+Ask HN: Parents, what are you doing for school this fall? 121
+How to politely crawl and analyze 500MM images 21
+Oracle enters race to buy TikTok’s US operations 23
+Categories of Optics (2018) 11
+Handmade: A Community for Self-Rolled Performant Software (2016) 171
+Named Tensors 68
+Robinhood now valued at $11.2B with new fund backing 66
+Spinning Up in Deep RL 202
+“Time of the Magicians” – philosophy&#x27;s great decade? 34
+Pibooth: A PhotoBooth application for Raspberry Pi and opencv compatible devices 17
+Factorio and Software Engineering 400
+Facebook left 6,500 gallons of drilling fluid off the coast of Oregon 53
+Uber and Lyft’s Business Model May Be Dead. Good 19
+MicroPython 335
+Pure Skill Minesweeper 272
+A guide to learning algorithms through LeetCode 435
+A CRISPR first produces squid as clear as glass 149
+Apple Statement on Epic 3
+Effective Airflow Development 8
+Recent Advances in Natural Language Processing 273
+The Strange Costumes of the Plague Doctors 84
+Pathological Lying: Theoretical and Empirical Support for a Diagnostic Entity 53
+Ask HN: How do you switch off from work, particularly when WFH? 35
+Why haven&#x27;t we celebrated any major achievements lately? 5
+Idris 2 version 0.2.1 128
+An Interview with Simon Kelley, the author of dnsmasq 20
+Using a Yubikey as a touchless, magic unlock key for Linux 144
+Show HN: Dungeon Map Doodler – Free online map drawing tool 138
+Building GUIs with DearPyGui 21
+A look at the J language: the fine line between genius and insanity (2012) 156
+Pytov – C-like syntax Python 45
+Jobseekers face exploitation as online recruitment is riddled with fake news 80
+Building AGI Using Language Models 22
+Show HN: Search the text of articles submitted to HN, with live updating 108
+Linux PinePhone has physical kill switches for its cameras, mic, data, BT, Wi-Fi 272
+A Twist on Schrödinger&#x27;s Cat Paradox 105
+Remote work is reshaping San Francisco, as tech workers flee and rents fall 705
+Are CRDTs suitable for shared editing? 164
+Tesorio Is Hiring a Senior Analytics Engineer and Senior Product Designer 10
+The Joy of Cryptography 7
+To Know, but Not Understand: David Weinberger on Science and Big Data (2012) 60
+Estimating True Infections 6
+A-Levels: The Model is not the Student 117
+A Brief History of ClarisWorks (2003) 84
+Unreal Engine on iOS and Mac in Jeopardy 5
+New Level 7 Hash Function: Prvhash 4
+How the Black Sea shaped the ancient Mediterranean world 106
+Seven months later, what we know about Covid-19 – and the questions that remain 30
+The Market for Discontinued Photographic Film 74
+Uber Turned a Promising Bikeshare Company into Literal Garbage 27
+Idris: A Language for Type-Driven Development 14
+Oracle is in talks to acquire TikTok’s U.S. operations, sources say 19
+Nerves – Elixir Platform for IoT 217
+Show HN: A bunch of simple SaaS calculators 21
+Beyond jsonb: a generalized, unstructured data type for Postgres 14
+He Wasn’t Toscanini, but He Made Orchestras Sing 5
+How to deploy a React app for free 125
+Spectrum Analyzer Software for OpenRAMAN 37
+1-Euro Houses 18
+Karpathy&#x27;s MinGPT 332
+Avro Canada VZ-9 Avrocar 30
+Apple to kill Epic’s accounts on Friday the 28th 662
+Dependency 678
+Connecting the Atari ST to the Internet with an ESP8266 (2017) 41
+Artificial eyespots on cattle reduce predation by large carnivores 245
+We should discuss soil as much as coal (2019) 177
+Buckingham Palace art collection to go on gallery display for the first time 29
+America Has Two Feet. It’s About to Lose One of Them 9
+Understanding Recursive Queries in PostgreSQL 157
+Rolling blackouts in California have power experts stumped 179
+Show HN: Made in India CSS 44
+Mindfulness and meditation can worsen depression and anxiety 304
+Historian&#x27;s Cookbook: We All Scream for Ice Cream (2018) 7
+A 35-year-old bug in Patch found in efforts to restore 29-year-old BSD 216
+Apple, Epic, and the App Store 474
+Next-Generation IBM POWER10 Processor 368
+Strange times: The sui generis Dave Brubeck 22
+Model P100a nuclear battery, and it comes in a DIP package 4
+Microsoft Put Off Fixing Zero Day for 2 Years 423
+How to Build an Iconic Company – Keith Rabois [audio] 63
+Response to Google open letter 365
+The Case of the Top Secret iPod 71
+Tencent: The Outsider 7
+Reclaiming Becket: London’s great saint needs a reboot 11
+Ask HN: Finding the Australian Aboriginal flag in all artworks 94
+Canon&#x27;s cloud platform has lost users&#x27; files – and it can&#x27;t restore them 135
+Gigapixel AI Accidentally Added Ryan Gosling’s Face to This Photo 40
+Graphical Linear Algebra 69
+Architecture of the Nintendo DS 113
+The life-changing love of one of the 20th century’s greatest physicists 29
+New language features and more in Kotlin 1.4 52
+Apple expands independent repair program to Mac after US antitrust investigation 387
+Mailto: ?attach=~/ parameter allows including arbitrary files on disk 51
+Let’s Learn x86-64 Assembly: Part 0 – Setup and First Steps 44
+A DOS JavaScript Canvas with Sound 15
+2.5M Medical Records Leaked by AI Company 214
+An Ecology of Mind 36
+Show HN: Dropbase 2.0 – Turn offline files into live databases 214
+The Computational Limits of Deep Learning 142
+Essential Coding Theory [pdf] 101
+The Last of the Hedgehogs: René Girard 14
+Create and view interactive cheatsheets on the command-line 48
+I fear App Review is getting too powerful (2015) [pdf] 901
+Slate, create beautiful, responsive API documentation 6
+Fossilised 429-million-year-old eye mirrors modern insect vision 4
+Using, Understanding, and Unraveling the OCaml Language 58
+Impossible Figures Library 43
+Launch HN: Batch (YC S20) – Replays for event-driven systems 134
+A circuit-like notation for lambda calculus (2015) 76
+A $10B Experimental City Nearly Got Built in Rural Minnesota (2018) 101
+Here’s an example of how brands build fake reviews on Amazon 33
+Stuck with Pound 16
+What’s Flying Above Us? 482
+Ultraviolet Hubble Movie 19
+Projected growth of Tiger Mosquito range in northeastern US (2013) 17
+Total entries of news  120
+
+News heading with highest point : I fear App Review is getting too powerful (2015) [pdf] 
+Highest Points:  901
+
+ Most occurring word : the
+<br/></div></td></tr></tbody></table></body></html>
